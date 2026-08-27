@@ -25,7 +25,6 @@ Run `make` (or `make help`) to list the available targets:
 
 ```bash
 make install           # install pre-commit hooks (run once after cloning)
-make protect-branch    # configure GitHub repo settings (auto-merge, branch protection) — override CHECKS if your repo's checks differ
 make lint              # run all pre-commit hooks against every file
 make fmt               # terraform fmt -recursive
 make validate          # terraform init + validate
@@ -143,53 +142,13 @@ Locally, `make plan` uses whatever the `azurerm` provider picks up normally —
 
 ## Configuring GitHub for a repo created from this template
 
-Some settings can't be templated as files and need to be set once per repo via
-the GitHub API. Run, with the [`gh` CLI](https://cli.github.com) authenticated
-as an account with admin rights on the new repo:
-
-```bash
-make protect-branch
-```
-
-This runs `scripts/protect-branch.sh` and is idempotent (safe to re-run). It:
-
-- Enables repository **auto-merge**, which `renovate.json`'s
-  `platformAutomerge` setting depends on — without it, Renovate's PRs sit
-  fully green forever with nothing to merge them.
-- Enables **delete branch on merge**, so merged Renovate branches don't pile up.
-- Deletes every ruleset currently on the repo, then creates a fresh one on the
-  target branch (default `main`, override with `BRANCH=<name>`) requiring the
-  given status checks and an approving review count before merge that
-  defaults to 1 for an organization-owned repo but 0 for a user-owned one
-  (override with `APPROVALS_REQUIRED`), with the Renovate GitHub App and the
-  repo **Admin** role exempted as bypass actors on both, so Renovate's
-  automerge and admin self-merges aren't blocked waiting on a second
-  approver. This makes re-runs a clean replace rather than an accumulation of
-  stale rulesets — don't run it against a repo that has unrelated rulesets
-  you want to keep.
-
-  The 0-review default on user-owned repos exists because GitHub only honors
-  ruleset bypass actors on organization-owned repos — on a personal repo the
-  Renovate exemption is silently ignored, so a nonzero required-review count
-  would block Renovate's own auto-merge forever (short of installing a
-  separate auto-approve app, e.g. Mend's `renovate-approve`). Status checks
-  and the block on direct pushes still apply either way.
-
-`CHECKS` defaults to this template's own two required status check contexts —
-override it if your repo's CI workflows differ. It's a **newline-separated**
-list, not space-separated, since a context name can itself contain spaces
-(e.g. `make protect-branch CHECKS="$(printf 'foo\nbar')"`):
-
-- `pre-commit / Pre-commit` — ci-pre-commit's `pre-commit` job calls a
-  reusable workflow, so the context it reports is `<caller job id> /
-  <reusable job name>`, not the bare job id. Requiring the bare `pre-commit`
-  leaves the check "Expected" forever.
-- `ci-terraform` — the `ci-terraform` gate job (always runs and reports even
-  when a PR has no Terraform changes — do **not** require `test`/`plan`
-  directly, require this gate instead). This one is still a plain inline job,
-  not a reusable-workflow call, so its context is just its job id.
-
-Confirm the exact context names for your repo's workflows with `gh pr checks`.
+Branch protection and other repo-level GitHub settings aren't templated as
+files here. This template's own repo is managed centrally by
+[jay-withers/github-repos](https://github.com/jay-withers/github-repos)'s
+Terraform root module, which is the single source of truth for every
+jay-withers repo. A brand-new repo created from this template starts out with
+GitHub's defaults and picks up the same managed settings once it's added to
+that module's `var.repos` and applied.
 
 ## Structure
 
@@ -230,7 +189,6 @@ CONTRIBUTING.md         # contributor workflow and expectations
     cd-tag.yml         # auto-tags on merge to main (semver patch bump)
 renovate.json          # automated dependency updates
 scripts/
-  protect-branch.sh         # one-time GitHub settings (auto-merge, branch protection ruleset)
   check-tf-file-layout.sh   # pre-commit hook: enforces locals/variables/outputs file layout
   tflint-per-env.sh         # pre-commit hook: tflint once per terraform/environments/*.tfvars
   checkov-per-env.sh        # pre-commit hook: checkov once per terraform/environments/*.tfvars
