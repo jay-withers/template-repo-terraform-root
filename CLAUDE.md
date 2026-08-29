@@ -29,19 +29,24 @@ on its own; `fmt`/`validate`/`test` still run directly against `terraform/` via
 Terraform version is pinned in `.terraform-version` at the repo root (tfenv/tenv
 and CI read it; it must stay at root so tfenv/tenv can discover it).
 
-**File layout is enforced, not just conventional**: `locals`/`variable`/`output`
-blocks must live in a matching `locals.tf`/`variables.tf`/`outputs.tf`, or a
-topic-scoped variant of any of them (e.g. `outputs.network.tf`,
-`locals.network.tf`), via the local pre-commit hook
-`scripts/check-tf-file-layout.sh`. TFLint's `terraform_standard_module_structure`
+**File layout is enforced, not just conventional**:
+`locals`/`variable`/`output`/`data` blocks must live in a matching
+`locals.tf`/`variables.tf`/`outputs.tf`/`data.tf`, and `terraform{}`/`provider{}`
+blocks in `versions.tf`, or a topic-scoped variant of any of them (e.g.
+`outputs.network.tf`, `data.state.tf`), via the local pre-commit hook
+`scripts/check-tf-standards.sh`. TFLint's `terraform_standard_module_structure`
 rule covers similar ground but hardcodes the exact filenames `variables.tf`/
-`outputs.tf` with no topic-scoped support and no locals coverage at all —
-it's deliberately left disabled in `terraform/.tflint.hcl` in favor of the
-custom script. This applies to every root config in the repo, including
-`terraform/examples/basic/` — hence its `variables.tf`/`outputs.tf` even
-though the example itself is tiny. When adding a new root config or growing
-the module, put new `variable`/`output`/`locals` blocks in the right file from
-the start rather than relying on a later cleanup pass.
+`outputs.tf` with no topic-scoped support and no locals/data/versions coverage
+at all — it's deliberately left disabled in `terraform/.tflint.hcl` in favor of
+the custom script. This repo is the canonical home of that script: `terraform-root-aks`,
+`azure-landingzone` and `github-repos` carry verbatim copies, so a change here
+should be re-copied there rather than diverging. It applies to every root config
+in the repo, including `terraform/examples/basic/` — hence its
+`variables.tf`/`outputs.tf`/`versions.tf` even though the example itself is tiny
+(its `provider "azurerm"` block lives in `versions.tf`, not `main.tf`). When
+adding a new root config or growing the module, put new
+`variable`/`output`/`locals`/`data` blocks in the right file from the start
+rather than relying on a later cleanup pass.
 
 The module creates one resource, `azurerm_resource_group.this`, named via the
 `Azure/naming/azurerm` module (suffixed with `var.environment`) — replace/add
@@ -113,7 +118,7 @@ Commits must follow [Conventional Commits](https://www.conventionalcommits.org/)
 
 ## Pre-commit config
 
-Hooks are in `.pre-commit-config.yaml` at the repo root. The `no-commit-to-branch` hook blocks direct commits to `main`. `terraform_fmt`/`terraform_validate`/`terraform_docs` come from `antonbabenko/pre-commit-terraform`. TFLint and Checkov are run by local hooks instead of that repo's `terraform_tflint`/`terraform_checkov`: `scripts/tflint-per-env.sh` and `scripts/checkov-per-env.sh` each glob `terraform/environments/*.tfvars` and run their tool once per environment with `--var-file`, so rules that depend on concrete variable values (naming, tags, region-specific checks) are evaluated against what each environment actually deploys — dropping a new environment's tfvars in `terraform/environments/` picks it up automatically, no config change needed. `tflint-per-env.sh` also discovers every directory under `terraform/` containing `.tf` files (not just the module root) since tflint, unlike checkov, doesn't recurse — both scripts prune hidden directories (via `-name '.?*'`, not `-name .terraform` specifically) so any future tool cache directory is excluded too without code changes; don't switch that to `-name '.*'` — it also matches the find root `.` itself and silently prunes everything. `checkov-per-env.sh` deliberately does **not** pass `--download-external-modules` — it was tried (to scan resources created by registry modules like `Azure/naming/azurerm`), but cost ~15s per invocation regardless of caching (checkov's own graph-building overhead, not network time) for zero benefit here, since that module has no resources of its own. Checkov logs a harmless "Failed to download module" warning as a result. The other local hook, `check-tf-file-layout` (`scripts/check-tf-file-layout.sh`), enforces the locals/variables/outputs file-layout convention described above.
+Hooks are in `.pre-commit-config.yaml` at the repo root. The `no-commit-to-branch` hook blocks direct commits to `main`. `terraform_fmt`/`terraform_validate`/`terraform_docs` come from `antonbabenko/pre-commit-terraform`. TFLint and Checkov are run by local hooks instead of that repo's `terraform_tflint`/`terraform_checkov`: `scripts/tflint-per-env.sh` and `scripts/checkov-per-env.sh` each glob `terraform/environments/*.tfvars` and run their tool once per environment with `--var-file`, so rules that depend on concrete variable values (naming, tags, region-specific checks) are evaluated against what each environment actually deploys — dropping a new environment's tfvars in `terraform/environments/` picks it up automatically, no config change needed. `tflint-per-env.sh` also discovers every directory under `terraform/` containing `.tf` files (not just the module root) since tflint, unlike checkov, doesn't recurse — both scripts prune hidden directories (via `-name '.?*'`, not `-name .terraform` specifically) so any future tool cache directory is excluded too without code changes; don't switch that to `-name '.*'` — it also matches the find root `.` itself and silently prunes everything. `checkov-per-env.sh` deliberately does **not** pass `--download-external-modules` — it was tried (to scan resources created by registry modules like `Azure/naming/azurerm`), but cost ~15s per invocation regardless of caching (checkov's own graph-building overhead, not network time) for zero benefit here, since that module has no resources of its own. Checkov logs a harmless "Failed to download module" warning as a result. The other local hook, `check-tf-standards` (`scripts/check-tf-standards.sh`), enforces the file-layout standards described above.
 
 ## CI
 

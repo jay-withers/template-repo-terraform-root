@@ -28,3 +28,7 @@ override.tf.json
 
 # Saved plan output
 *.tfplan
+
+# macOS finder metadata
+.DS_Store
+**/.DS_Store

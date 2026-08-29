@@ -75,11 +75,12 @@ validates against exactly these three values.
 ## File layout convention
 
 Every root config and the module itself follow a fixed layout, enforced (not
-just documented): `locals`/`variable`/`output` blocks must live in a matching
-`locals.tf`/`variables.tf`/`outputs.tf`, or a topic-scoped variant of any of
-them (e.g. `outputs.network.tf`, `locals.network.tf`), via the local
-pre-commit hook `check-tf-file-layout` (`scripts/check-tf-file-layout.sh`).
-`main.tf` is left for resources, data sources, and module blocks.
+just documented): `locals`/`variable`/`output`/`data` blocks must live in a
+matching `locals.tf`/`variables.tf`/`outputs.tf`/`data.tf`, and
+`terraform{}`/`provider{}` blocks in `versions.tf` — or a topic-scoped variant
+of any of them (e.g. `outputs.network.tf`, `data.state.tf`) — via the local
+pre-commit hook `check-tf-standards` (`scripts/check-tf-standards.sh`).
+`main.tf` is left for resources and module blocks.
 
 ## Linting against every environment
 
@@ -189,7 +190,7 @@ CONTRIBUTING.md         # contributor workflow and expectations
     cd-tag.yml         # auto-tags on merge to main (semver patch bump)
 renovate.json          # automated dependency updates
 scripts/
-  check-tf-file-layout.sh   # pre-commit hook: enforces locals/variables/outputs file layout
+  check-tf-standards.sh     # pre-commit hook: enforces the Terraform file layout standards
   tflint-per-env.sh         # pre-commit hook: tflint once per terraform/environments/*.tfvars
   checkov-per-env.sh        # pre-commit hook: checkov once per terraform/environments/*.tfvars
 Makefile
