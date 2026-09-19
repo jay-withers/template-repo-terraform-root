@@ -65,8 +65,8 @@ plugin's `version = "..."` pin has its own Renovate regex manager in
 package, or download URL any of the shared presets already cover.
 
 `renovate.json` extends the shared presets from
-[`jay-withers/template-renovate`](https://github.com/jay-withers/template-renovate)
-(`github>jay-withers/template-renovate`) rather than configuring Renovate
+[`jay-withers/renovate`](https://github.com/jay-withers/renovate)
+(`github>jay-withers/renovate`) rather than configuring Renovate
 inline — that one line pulls in `config:recommended`, semantic commits,
 automerge/schedule policy, and per-ecosystem grouping (docker, github-actions,
 terraform, npm, pre-commit). Only what's genuinely specific to this repo
@@ -75,7 +75,7 @@ branch-protection review requirement) and the two `regexManagers` above
 (`.terraform-version`, `.tflint.hcl`'s azurerm plugin pin) — neither is a
 GitHub Action, npm/pip package, or Docker image any shared preset's manager
 already covers. Change ecosystem-wide policy (grouping, schedule, automerge)
-in `template-renovate` itself so every consuming repo picks it up; only touch
+in `renovate` itself so every consuming repo picks it up; only touch
 this file for something unique to this module.
 
 Azure-side deletion protection (`prevent_deletion_if_contains_resources`) is a
