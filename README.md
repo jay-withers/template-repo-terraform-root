@@ -188,6 +188,7 @@ CONTRIBUTING.md         # contributor workflow and expectations
     ci-pre-commit.yml  # lints all files on PRs to main
     ci-terraform.yml   # terraform test + plan (matrix over dev/stg/prd), gated to Terraform changes
     cd-tag.yml         # auto-tags on merge to main (semver patch bump)
+    cd-terraform.yml   # plans dev on merge, applies on manual run; dormant until terraform/backends/dev.hcl exists
 renovate.json          # automated dependency updates
 scripts/
   check-tf-standards.sh     # pre-commit hook: enforces the Terraform file layout standards
