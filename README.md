@@ -1,7 +1,7 @@
 # template-terraform
 
-A GitHub repository template for Azure Terraform modules, providing a dev container,
-Terraform pre-commit hooks (fmt, validate, tflint w/ the `azurerm` ruleset,
+A GitHub repository template for Azure Terraform modules, providing pinned tools
+(mise), Terraform pre-commit hooks (fmt, validate, tflint w/ the `azurerm` ruleset,
 terraform-docs, checkov), CI workflows, and Renovate dependency updates. The
 module scaffold creates an `azurerm_resource_group`, named via
 [Azure/naming/azurerm](https://registry.terraform.io/modules/Azure/naming/azurerm/latest)
@@ -9,22 +9,25 @@ module scaffold creates an `azurerm_resource_group`, named via
 
 ## Getting started
 
-Open the repository in the dev container (VS Code: **Reopen in Container**, or
-GitHub Codespaces). The container ships with Terraform, TFLint, terraform-docs,
-and Checkov, and runs `make install` on creation to wire up the pre-commit hooks.
-
-Outside a dev container, install the hooks manually:
+Once per machine, set up the tools with
+[jay-withers/toolchain](https://github.com/jay-withers/toolchain)
+(`bash src/setup.sh`), which installs [mise](https://mise.jdx.dev). Then, in
+this repo:
 
 ```bash
-make install
+mise trust && make install   # make install runs `mise install` first
 ```
+
+`mise.toml` pins every tool this repo's hooks, build and CI use; CI installs
+the same versions (jay-withers/workflows v1.26.1+). Add a tool there rather
+than installing it by hand.
 
 ## Commands
 
 Run `make` (or `make help`) to list the available targets:
 
 ```bash
-make install           # install pre-commit hooks (run once after cloning)
+make install           # install mise tools and pre-commit hooks (run once after cloning)
 make lint              # run all pre-commit hooks against every file
 make fmt               # terraform fmt -recursive
 make validate          # terraform init + validate
@@ -38,8 +41,8 @@ itself has no provider block (by design; modules shouldn't configure
 providers), so it can't be planned on its own. See [Azure auth for `terraform
 plan`](#azure-auth-for-terraform-plan) below: `make plan` creates a real
 `azurerm_resource_group`, so — unlike `fmt`/`validate`/`test` — it needs real
-Azure credentials. The Terraform version is pinned in `.terraform-version`
-(used by tfenv/tenv and CI).
+Azure credentials. The Terraform version is pinned in `mise.toml`
+(used locally and by CI).
 
 ## Testing
 
@@ -154,9 +157,7 @@ that module's `var.repos` and applied.
 ## Structure
 
 ```text
-.devcontainer/
-  devcontainer.json    # dev container (ghcr.io/jay-withers/dev-container/terraform)
-.terraform-version     # pinned Terraform version (tfenv/tenv + CI)
+mise.toml              # pinned tool versions: terraform, tflint, terraform-docs, checkov, pre-commit
 terraform/
   versions.tf          # required_version / required_providers
   main.tf              # resources (azurerm_resource_group, named via Azure/naming/azurerm)
