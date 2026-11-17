@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo does
 
 A GitHub repository template for Azure Terraform modules. It provides pinned tools
-(mise), Terraform-aware pre-commit hooks, CI workflows (linting + `terraform plan`,
-auto-tagging), Renovate dependency updates, and Makefile scaffolding.
+(mise), Terraform-aware pre-commit hooks, CI workflows (linting, credential-free
+validate and `terraform test`, auto-tagging, a dormant cd-terraform), Renovate dependency updates, and Makefile scaffolding.
 
 ## Tools
 
@@ -21,7 +21,7 @@ jay-withers/toolchain. There is no dev container.
 The module lives in `terraform/` (`versions.tf`, `main.tf`, `locals.tf`,
 `variables.tf`, `outputs.tf`); its tests are in `terraform/tests/*.tftest.hcl`.
 `terraform/examples/basic/` is a consumer of the module and is what
-`ci-terraform` (and `make plan`) plan against — the module itself has no
+`make plan` plans against (`ci-terraform` inits and validates it too) — the module itself has no
 provider block (modules shouldn't configure providers) so it can't be planned
 on its own; `fmt`/`validate`/`test` still run directly against `terraform/` via
 `terraform -chdir=terraform`. The `README.md` in `terraform/` and
@@ -56,9 +56,9 @@ to this as the module grows. Inputs: a required `environment`
 (defaults to `westeurope`), and `tags`. `tags` is merged with
 `local.default_tags` (`terraform/locals.tf`) — `environment` and
 `managed-by = "terraform"` — with caller-supplied `tags` taking precedence on
-key conflicts. Because there's now a real resource, both `make plan` and the
-`ci-terraform` plan job need real Azure credentials — `terraform test`
-(mocked provider) is the only credential-free check. `terraform/.tflint.hcl`
+key conflicts. Because there's now a real resource, `make plan` needs real Azure
+credentials; CI runs no plan, only validate and `terraform test` (mocked
+provider), so it needs none. `terraform/.tflint.hcl`
 runs both the generic `terraform` ruleset and the `azurerm` ruleset
 (`terraform-linters/tflint-ruleset-azurerm`) for azurerm-specific rules. That
 plugin's `version = "..."` pin has its own Renovate regex manager in
@@ -127,9 +127,11 @@ Hooks are in `.pre-commit-config.yaml` at the repo root. The `no-commit-to-branc
 Workflows are prefixed `ci-` (pull-request checks) or `cd-` (post-merge delivery):
 
 - **ci-pre-commit**: runs all linters on PRs to `main` via the `pre-commit` job, which calls the reusable workflow `jay-withers/workflows/.github/workflows/pre-commit.yml` (pinned by commit SHA, with the tag as a comment) rather than inlining the steps — because it's a reusable-workflow call, the status check context it reports on a PR is `pre-commit / Pre-commit` (`<caller job id> / <reusable job name>`), not the bare `pre-commit` job id
-- **ci-terraform**: a `changes` job (dorny/paths-filter) gates a `test` job (`terraform test`, mocked provider) and a `plan` job (`terraform plan` on `terraform/examples/basic/` via Azure OIDC, matrixed over `environment: [dev, stg, prd]` against `../../environments/<env>.tfvars`) so they run only when a PR touches Terraform. The plan job is additionally gated on `if: vars.AZURE_CLIENT_ID != ''`, so it stays skipped until the `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID` repository variables are set — all three matrix legs currently share that one subscription. The `ci-terraform` gate job always runs and is the check to require in branch protection — path filtering is at the job level (not the workflow trigger) precisely so the required check always reports.
+- **ci-terraform**: credential-free, via the shared `terraform.yml`: init and validate of `terraform/` and `terraform/examples/basic/`, plus `terraform test` (mocked provider) against `terraform/`. There is no plan job — the template ships no credentials, and a downstream repo's real plan is cd-terraform's, on merge. The path filter and an always-reporting gate live in the shared workflow; require `terraform / Terraform`.
+- **ci-codeql**: CodeQL code scanning of the workflows.
 - **cd-tag**: auto-creates a semver tag on every merge to `main` (default bump: patch)
 - **cd-terraform**: plans dev on merges touching Terraform via the shared `terraform-deploy.yml`, and applies only on a manual run (Actions → Run workflow); a plan with changes opens a `terraform-pending` issue. Dormant here: a `ready` job skips it until `terraform/backends/dev.hcl` exists, so the template (and a fresh repo made from it) never runs a deploy. The workflow's header comment lists the steps to switch it on (github-repos `state_consumers` identity, backend file, first local apply).
+- **schedule-drift** (nightly drift plan, recorded as an `OpsEvents_CL` row) and **manual-terraform-unlock** (releases a stuck state lock, run by hand) are dormant the same way.
 
 ## GitHub repo settings
 
