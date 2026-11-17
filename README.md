@@ -1,6 +1,7 @@
-# template-terraform
+# template-repo-terraform-root
 
-A GitHub repository template for Azure Terraform modules, providing pinned tools
+A GitHub repository template for an Azure Terraform root configuration (it
+starts as a module plus an example that consumes it), providing pinned tools
 (mise), Terraform pre-commit hooks (fmt, validate, tflint w/ the `azurerm` ruleset,
 terraform-docs, checkov), CI workflows, and Renovate dependency updates. The
 module scaffold creates an `azurerm_resource_group`, named via
@@ -29,6 +30,7 @@ Run `make` (or `make help`) to list the available targets:
 ```bash
 make install           # install mise tools and pre-commit hooks (run once after cloning)
 make lint              # run all pre-commit hooks against every file
+make init              # terraform init in terraform/
 make fmt               # terraform fmt -recursive
 make validate          # terraform init + validate
 make plan              # terraform init + plan the basic example (set ENV=dev|stg|prd, default dev)
@@ -47,8 +49,8 @@ Azure credentials. The Terraform version is pinned in `mise.toml`
 ## Testing
 
 `terraform/tests/*.tftest.hcl` holds the module's tests. They mock the `azurerm`
-provider, so `make test` (and the `ci-terraform` **test** job) run with no Azure
-credentials. Add `assert` blocks as the module grows.
+provider, so `make test` (and `ci-terraform`) run with no Azure credentials.
+Add `assert` blocks as the module grows.
 
 ## Environments
 
@@ -121,28 +123,48 @@ too, since the module can't do it for them.
 
 ## Azure auth for `terraform plan`
 
-The module creates a real `azurerm_resource_group`, so both `make plan` and
-the `ci-terraform` **plan** job need real Azure credentials — `terraform test`
-(mocked provider) is the only credential-free check.
+`make plan` creates a real `azurerm_resource_group`, so it needs real Azure
+credentials: whatever the `azurerm` provider picks up normally, `az login` or
+`ARM_*` environment variables. `terraform test` (mocked provider) is the only
+credential-free check, and the only one CI runs on a fresh repo.
 
-In CI, the `ci-terraform` **plan** job runs `terraform plan` against
-`terraform/examples/basic/` once per environment (`environments/{dev,stg,prd}.tfvars`,
-as a matrix) using GitHub OIDC (no long-lived secrets). It is **skipped until
-you set the `AZURE_CLIENT_ID` repository variable**, so a freshly created repo
-stays green until Azure auth is wired up. All three environments currently
-share one Azure subscription (`ARM_SUBSCRIPTION_ID`) — if you later split
-environments across subscriptions, the `plan` job's matrix is where to wire up
-per-environment credentials. To enable it:
+## CI/CD
 
-1. Create an Azure app registration / managed identity and add a **federated
-   credential** trusting this repository's GitHub Actions.
-2. Grant it the roles it needs on the target subscription.
-3. Add three **repository variables** (Settings → Secrets and variables →
-   Actions → Variables): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
-   `AZURE_SUBSCRIPTION_ID`.
+Every workflow is a thin caller of a shared one in
+[jay-withers/workflows](https://github.com/jay-withers/workflows), pinned by
+SHA. A repo made from this template is green from its first PR, with no Azure
+auth configured.
 
-Locally, `make plan` uses whatever the `azurerm` provider picks up normally —
-`az login`, or `ARM_*` environment variables for a service principal/OIDC.
+- **ci-pre-commit**: every hook, Terraform ones included. Check:
+  `pre-commit / Pre-commit`.
+- **ci-terraform**: credential-free `init` + `validate` of the module and the
+  example, and `terraform test` of the module. Check: `terraform / Terraform`
+  (an always-reporting gate, so it can be required). There is no plan job.
+- **ci-codeql**: CodeQL code scanning of the workflows.
+- **cd-tag**: a semver tag and release on every merge to `main`.
+- **cd-terraform**, **schedule-drift** and **manual-terraform-unlock** are
+  dormant until `terraform/backends/dev.hcl` exists. Then cd-terraform plans
+  dev on merge, opens a `terraform-pending` issue when the plan has changes,
+  and applies when run by hand from the Actions tab; schedule-drift plans
+  nightly and records drift; manual-terraform-unlock releases a stuck state
+  lock. Only dev is ever applied.
+
+To make a repo created from this template deploy for real:
+
+1. In [github-repos](https://github.com/jay-withers/github-repos), add the
+   repo to `state_consumers` with its `deploy_resource_groups` and
+   `create_resource_groups = true`, and apply. That creates the resource
+   group, the OIDC identity and its grants, and sets `AZURE_CLIENT_ID`,
+   `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` on the repo's `dev`
+   environment.
+2. Make `terraform/` the root module (provider block, `backend "azurerm" {}`)
+   and add `terraform/backends/dev.hcl`.
+3. Merge, then run cd-terraform to apply.
+
+The identity holds Contributor and conditioned RBAC Administrator on its own
+resource group(s) and Reader on the subscription, so role assignments outside
+its group still need a local `terraform apply`. Grant roles to explicit object IDs,
+never to "whoever applies".
 
 ## Configuring GitHub for a repo created from this template
 
@@ -174,22 +196,20 @@ terraform/
     stg.tfvars
     prd.tfvars
   examples/
-    basic/             # example ci-terraform plans against (main.tf, variables.tf, outputs.tf)
+    basic/             # example `make plan` plans against (main.tf, variables.tf, outputs.tf)
 .pre-commit-config.yaml
 commitlint.config.js
-CONTRIBUTING.md         # contributor workflow and expectations
+.vscode/
+  extensions.json      # recommended VS Code extensions
 .github/
-  CODEOWNERS
-  pull_request_template.md
-  ISSUE_TEMPLATE/
-    bug_report.yml
-    feature_request.yml
-    config.yml
   workflows/
     ci-pre-commit.yml  # lints all files on PRs to main
-    ci-terraform.yml   # terraform test + plan (matrix over dev/stg/prd), gated to Terraform changes
+    ci-terraform.yml   # validate module + example, terraform test (no credentials)
+    ci-codeql.yml      # CodeQL over the workflows
     cd-tag.yml         # auto-tags on merge to main (semver patch bump)
     cd-terraform.yml   # plans dev on merge, applies on manual run; dormant until terraform/backends/dev.hcl exists
+    schedule-drift.yml # nightly drift plan; dormant likewise
+    manual-terraform-unlock.yml  # releases a stuck state lock; dormant likewise
 renovate.json          # automated dependency updates
 scripts/
   check-tf-standards.sh     # pre-commit hook: enforces the Terraform file layout standards
